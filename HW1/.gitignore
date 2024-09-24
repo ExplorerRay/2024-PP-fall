@@ -1,0 +1,3 @@
+part1/myexp
+part1/*.o
+part1/*.s
