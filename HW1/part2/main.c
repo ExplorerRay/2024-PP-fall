@@ -48,10 +48,12 @@ int main(int argc, char **argv) {
     }
   }
 
-  float *values1 = (float *)__builtin_alloca_with_align(N * sizeof(float), 32);
-  float *values2 = (float *)__builtin_alloca_with_align(N * sizeof(float), 32);
-  double *values3 = (double *)__builtin_alloca_with_align(N * sizeof(double), 32);
-  float *output = (float *)__builtin_alloca_with_align(N * sizeof(float), 32);
+#define AVX_ALIGNMENT 256
+  float *values1 = (float *)__builtin_alloca_with_align(N * sizeof(float), AVX_ALIGNMENT);
+  float *values2 = (float *)__builtin_alloca_with_align(N * sizeof(float), AVX_ALIGNMENT);
+  double *values3 = (double *)__builtin_alloca_with_align(N * sizeof(double), AVX_ALIGNMENT);
+  float *output = (float *)__builtin_alloca_with_align(N * sizeof(float), AVX_ALIGNMENT);
+#undef AVX_ALIGNMENT
   initValue(values1, values2, values3, output, N);
 
   printf("Running test%d()...\n", whichTestToRun);
