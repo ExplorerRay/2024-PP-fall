@@ -1,3 +1,6 @@
 part1/myexp
 part1/*.o
 part1/*.s
+part2/*.o
+part2/*.s
+part2/test_auto_vectorize

@@ -7,4 +7,3 @@ NYCU 2024 parallel programming fall
     - Auto vectorization optimization by compiler
 - HW2
     - Pthread speedup PI calculation
-    
