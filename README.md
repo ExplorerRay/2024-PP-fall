@@ -7,3 +7,4 @@ NYCU 2024 parallel programming fall
     - Auto vectorization optimization by compiler
 - HW2
     - Pthread speedup PI calculation
+    - Parallel Fractal Generation Using std::thread
