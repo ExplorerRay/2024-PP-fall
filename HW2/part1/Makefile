@@ -5,7 +5,7 @@ CXXFLAGS = -std=c++11 -Wall -Wextra -Werror -O3
 
 all: pi.out
 
-pi.out: main.cpp
+pi.out: pi.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 clean:
