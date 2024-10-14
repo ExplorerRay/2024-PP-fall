@@ -1,8 +1,7 @@
 #include <iostream>
-#include <random>
 #include <pthread.h>
-#include <unistd.h>
 #include <vector>
+#include <time.h>
 
 using namespace std;
 
@@ -15,6 +14,13 @@ struct alignas(64) padded_long {
     long long value;
 };
 
+uint32_t xorshift32(uint32_t state){
+    state ^= state << 13;
+    state ^= state >> 17;
+    state ^= state << 5;
+    return state;
+}
+
 vector<padded_long> *num_in_circle_part;
 
 void *tossing(void *data){
@@ -22,11 +28,14 @@ void *tossing(void *data){
     int tid = td->tid;
     long long num_of_toss = td->tosses;
     long long number_in_circle = 0;
-    minstd_rand generator(tid);
-    uniform_real_distribution<double> unif(-1.0, 1.0);
+
+    time_t timer;
+    long seed = time(&timer);
     for(long long toss = 0; toss < num_of_toss; toss++){
-        double x = unif(generator);
-        double y = unif(generator);
+        seed = xorshift32(seed);
+        double x = seed / static_cast<double>(UINT32_MAX) * 2 - 1;
+        seed = xorshift32(seed);
+        double y = seed / static_cast<double>(UINT32_MAX) * 2 - 1;
         double distance_squared = x*x + y*y;
         if(distance_squared <= 1.0){
             number_in_circle++;
