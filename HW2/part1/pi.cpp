@@ -1,7 +1,6 @@
 #include <iostream>
 #include <pthread.h>
 #include <vector>
-#include <time.h>
 
 using namespace std;
 
@@ -29,8 +28,7 @@ void *tossing(void *data){
     long long num_of_toss = td->tosses;
     long long number_in_circle = 0;
 
-    time_t timer;
-    long seed = time(&timer);
+    long seed = 182379287;
     for(long long toss = 0; toss < num_of_toss; toss++){
         seed = xorshift32(seed);
         double x = seed / static_cast<double>(UINT32_MAX) * 2 - 1;
