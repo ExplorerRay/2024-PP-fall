@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <vector>
 #include <immintrin.h>
+#include <time.h>
 
 using namespace std;
 
@@ -14,11 +15,39 @@ struct alignas(64) padded_long {
     long long value;
 };
 
-uint32_t xorshift32(uint32_t state) {
-    state ^= state << 13;
-    state ^= state >> 17;
-    state ^= state << 5;
+__m256i SIMD_xorshift(__m256i state) {
+    // uint32_t xorshift32(uint32_t state) {
+    //     state ^= state << 13;
+    //     state ^= state >> 17;
+    //     state ^= state << 5;
+    //     return state;
+    // }
+    // Do the xorshift32 operation on each 32-bit integer in the state
+    const __m256i shift13 = _mm256_slli_epi32(state, 13);
+    state = _mm256_xor_si256(state, shift13);
+    const __m256i shift17 = _mm256_srli_epi32(state, 17);
+    state = _mm256_xor_si256(state, shift17);
+    const __m256i shift5 = _mm256_slli_epi32(state, 5);
+    state = _mm256_xor_si256(state, shift5);
+
     return state;
+}
+
+__m256 narrowRange(__m256i bits) {
+    const __m256i mantissaMask = _mm256_set1_epi32(0x7FFFFF);
+    const __m256i mantissa = _mm256_and_si256(bits, mantissaMask);
+
+    // Convert to a floating-point number in the range [1.0, 2.0)
+    const __m256 one = _mm256_set1_ps(1.0f);
+    __m256 val = _mm256_or_ps(_mm256_castsi256_ps(mantissa), one);
+
+    // Scale the number from [1.0, 2.0) to [0.0, 1.0)
+    val = _mm256_sub_ps(val, one);
+
+    // Scale and shift to map [0.0, 1.0) to [-1.0, 1.0)
+    val = _mm256_fmsub_ps(val, _mm256_set1_ps(2.0f), _mm256_set1_ps(1.0f));
+    
+    return val;
 }
 
 vector<padded_long> *num_in_circle_part;
@@ -29,44 +58,23 @@ void *tossing(void *data) {
     long long num_of_toss = td->tosses;
     long long number_in_circle = 0;
 
-    long seed = 278787883;
+    time_t timer;
+    long seed = time(&timer);
+    __m256i state = _mm256_set_epi32(seed, seed + 1, seed + 2, seed + 3, seed + 4, seed + 5, seed + 6, seed + 7);
 
-    // AVX2 vectors for processing 8 float values in parallel
     __m256 one = _mm256_set1_ps(1.0);
-
     for (long long toss = 0; toss < num_of_toss; toss += 8) {
-        // Generate 8 random x values
-        seed = xorshift32(seed);
-        __m256 x = _mm256_setr_ps(
-            (seed / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1)
-        );
-
-        // Generate 8 random y values
-        seed = xorshift32(seed);
-        __m256 y = _mm256_setr_ps(
-            (seed / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1),
-            (xorshift32(seed) / static_cast<float>(UINT32_MAX) * 2 - 1)
-        );
+        state = SIMD_xorshift(state);
+        __m256 x = narrowRange(state);
+        state = SIMD_xorshift(state);
+        __m256 y = narrowRange(state);
 
         // Compute squared distance
         __m256 x_squared = _mm256_mul_ps(x, x);
         __m256 y_squared = _mm256_mul_ps(y, y);
         __m256 distance_squared = _mm256_add_ps(x_squared, y_squared);
 
-        // Compare distance_squared <= 1.0
+        // Compare distance_squared <= 1.0f
         __m256 mask = _mm256_cmp_ps(distance_squared, one, _CMP_LE_OS);
 
         // Count the number of points inside the circle
