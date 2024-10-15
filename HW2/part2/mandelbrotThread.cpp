@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <thread>
+#include <immintrin.h>
 
 #include "CycleTimer.h"
+
+#pragma GCC target("avx2")
 
 typedef struct
 {
@@ -16,23 +19,38 @@ typedef struct
     int numThreads;
 } WorkerArgs;
 
-static inline int mandel(float c_re, float c_im, int count)
-{
-  float z_re = c_re, z_im = c_im;
-  int i;
-  for (i = 0; i < count; ++i)
-  {
+static inline __m256i mandel_simd(__m256 c_re, __m256 c_im, int count) {
+    __m256 z_re = c_re;
+    __m256 z_im = c_im;
+    __m256i iter = _mm256_setzero_si256();
+    __m256 threshold = _mm256_set1_ps(4.0f);
 
-    if (z_re * z_re + z_im * z_im > 4.f)
-      break;
+    for (int i = 0; i < count; ++i) {
+        // Calculate z_re^2 and z_im^2
+        __m256 z_re2 = _mm256_mul_ps(z_re, z_re);
+        __m256 z_im2 = _mm256_mul_ps(z_im, z_im);
+        __m256 mag2 = _mm256_add_ps(z_re2, z_im2);
 
-    float new_re = z_re * z_re - z_im * z_im;
-    float new_im = 2.f * z_re * z_im;
-    z_re = c_re + new_re;
-    z_im = c_im + new_im;
-  }
+        // Check if the magnitude squared is greater than 4
+        __m256 mask = _mm256_cmp_ps(mag2, threshold, _CMP_LE_OQ);
+        int mask_int = _mm256_movemask_ps(mask);
+        if (mask_int == 0) {
+            // All values have escaped, exit early
+            break;
+        }
 
-  return i;
+        // Calculate the new z_re and z_im
+        __m256 new_re = _mm256_sub_ps(z_re2, z_im2);
+        __m256 new_im = _mm256_mul_ps(_mm256_mul_ps(z_re, z_im), _mm256_set1_ps(2.0f));
+        z_re = _mm256_add_ps(c_re, new_re);
+        z_im = _mm256_add_ps(c_im, new_im);
+
+        // Update iterations where mask is true
+        __m256i mask_count = _mm256_and_si256(_mm256_castps_si256(mask), _mm256_set1_epi32(1));
+        iter = _mm256_add_epi32(iter, mask_count);
+    }
+
+    return iter;
 }
 
 void mandelbrotCustom(
@@ -41,24 +59,33 @@ void mandelbrotCustom(
     int startRow, int totalRows,
     int maxIterations,
     int output[],
-    int threadID, int numThreads)
-{
-  float dx = (x1 - x0) / width;
-  float dy = (y1 - y0) / height;
+    int threadID, int numThreads) {
+    
+    float dx = (x1 - x0) / width;
+    float dy = (y1 - y0) / height;
 
-  int endRow = startRow + totalRows;
+    int endRow = startRow + totalRows;
 
-  for (int j = startRow; j < endRow; j += numThreads)
-  {
-    for (int i = 0; i < width; ++i)
-    {
-      float x = x0 + i * dx;
-      float y = y0 + j * dy;
+    for (int j = startRow; j < endRow; j += numThreads) {
+        float y = y0 + j * dy;
+        for (int i = 0; i < width; i += 8) {
+            // Calculate x values for 8 pixels at a time
+            __m256 x_vals = _mm256_add_ps(_mm256_set1_ps(x0), _mm256_mul_ps(_mm256_set_ps(i+7, i+6, i+5, i+4, i+3, i+2, i+1, i), _mm256_set1_ps(dx)));
+            __m256 y_vals = _mm256_set1_ps(y);
 
-      int index = (j * width + i);
-      output[index] = mandel(x, y, maxIterations);
+            // Perform Mandelbrot iteration for 8 pixels
+            __m256i iterations = mandel_simd(x_vals, y_vals, maxIterations);
+
+            // Store the result
+            int *iter_array = new int[8];
+            _mm256_storeu_si256((__m256i*)iter_array, iterations);
+            for (int k = 0; k < 8; ++k) {
+                if (i + k < width) {
+                    output[(j * width) + (i + k)] = iter_array[k];
+                }
+            }
+        }
     }
-  }
 }
 
 //
@@ -67,21 +94,8 @@ void mandelbrotCustom(
 // Thread entrypoint.
 void workerThreadStart(WorkerArgs *const args)
 {
-
-    // TODO FOR PP STUDENTS: Implement the body of the worker
-    // thread here. Each thread could make a call to mandelbrotSerial()
-    // to compute a part of the output image. For example, in a
-    // program that uses two threads, thread 0 could compute the top
-    // half of the image and thread 1 could compute the bottom half.
-    // Of course, you can copy mandelbrotSerial() to this file and
-    // modify it to pursue a better performance.
     double startTime = CycleTimer::currentSeconds();
-    // mandelbrotSerial(args->x0, args->y0, args->x1, args->y1,
-    //                  args->width, args->height,
-    //                  args->threadId * args->height / args->numThreads,
-    //                  args->height / args->numThreads,
-    //                  args->maxIterations, args->output);
-    
+
     mandelbrotCustom(args->x0, args->y0, args->x1, args->y1,
                      args->width, args->height,
                      args->threadId,
@@ -118,9 +132,6 @@ void mandelbrotThread(
 
     for (int i = 0; i < numThreads; i++)
     {
-        // TODO FOR PP STUDENTS: You may or may not wish to modify
-        // the per-thread arguments here.  The code below copies the
-        // same arguments for each thread
         args[i].x0 = x0;
         args[i].y0 = y0;
         args[i].x1 = x1;
