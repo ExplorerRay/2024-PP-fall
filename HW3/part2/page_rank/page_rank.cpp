@@ -28,32 +28,43 @@ void pageRank(Graph g, double *solution, double damping, double convergence)
     solution[i] = equal_prob;
   }
 
-  /*
-     For PP students: Implement the page rank algorithm here.  You
-     are expected to parallelize the algorithm using openMP.  Your
-     solution may need to allocate (and free) temporary arrays.
+  // initialize score_new
+  double *score_new = (double *)malloc(sizeof(double) * numNodes);
+  bool converged = false;
+  double global_diff, dangling_sum;
+  while(!converged) {
+    dangling_sum = 0.0;
+    #pragma omp parallel for reduction(+:dangling_sum)
+    for (int i = 0; i < numNodes; i++) {
+      if (outgoing_size(g, i) == 0) {
+        dangling_sum += solution[i];
+      }
+    }
 
-     Basic page rank pseudocode is provided below to get you started:
+    #pragma omp parallel for
+    for(int i = 0; i < numNodes; i++) {
+      const Vertex* in_begin = incoming_begin(g, i);
+      const Vertex* in_end = incoming_end(g, i);
+      score_new[i] = 0.0;
+      // there is dependency between solution, so use score_new
+      for(const Vertex* it = in_begin; it != in_end; it++) {
+        score_new[i] += solution[*it] / outgoing_size(g, *it);
+      }
 
-     // initialization: see example code above
-     score_old[vi] = 1/numNodes;
+      score_new[i] = damping * score_new[i]
+        + (1.0 - damping) / numNodes
+        + damping * dangling_sum / numNodes;
+    }
 
-     while (!converged) {
-
-       // compute score_new[vi] for all nodes vi:
-       score_new[vi] = sum over all nodes vj reachable from incoming edges
-                          { score_old[vj] / number of edges leaving vj  }
-       score_new[vi] = (damping * score_new[vi]) + (1.0-damping) / numNodes;
-
-       score_new[vi] += sum over all nodes v in graph with no outgoing edges
-                          { damping * score_old[v] / numNodes }
-
-       // compute how much per-node scores have changed
-       // quit once algorithm has converged
-
-       global_diff = sum over all nodes vi { abs(score_new[vi] - score_old[vi]) };
-       converged = (global_diff < convergence)
-     }
-
-   */
+    // check convergence
+    global_diff = 0.0;
+    #pragma omp parallel for reduction(+:global_diff)
+    for(int i = 0; i < numNodes; i++) {
+      global_diff += std::abs(score_new[i] - solution[i]);
+      // assign score_new to solution for next iteration
+      solution[i] = score_new[i];
+    }
+    converged = (global_diff < convergence);
+  }
+  free(score_new);
 }
