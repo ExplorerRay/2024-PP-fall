@@ -5,6 +5,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#define UINT32_MAX  (0xffffffff)
+
+u_int32_t xorshift32(u_int32_t state) {
+    state ^= state << 13;
+    state ^= state >> 17;
+    state ^= state << 5;
+    return state;
+}
+
 int main(int argc, char **argv)
 {
     // --- DON'T TOUCH ---
@@ -16,12 +25,33 @@ int main(int argc, char **argv)
     // ---
 
     // TODO: MPI init
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    long long local_tosses = tosses / world_size;
+    long long number_in_circle = 0;
+    time_t timer;
+    long seed = time(&timer) + world_rank;
+
+    for (long long toss = 0; toss < local_tosses; toss++)
+    {
+        double x = seed / static_cast<double>(UINT32_MAX) * 2 - 1;
+        seed = xorshift32(seed);
+        double y = seed / static_cast<double>(UINT32_MAX) * 2 - 1;
+        seed = xorshift32(seed);
+        double distance_squared = x * x + y * y;
+        if (distance_squared <= 1) {
+            number_in_circle++;
+        }
+    }
 
     // TODO: use MPI_Reduce
+    long long total_number_in_circle = 0;
+    MPI_Reduce(&number_in_circle, &total_number_in_circle, 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
     if (world_rank == 0)
     {
         // TODO: PI result
+        pi_result = 4 * total_number_in_circle / ((double)tosses);
 
         // --- DON'T TOUCH ---
         double end_time = MPI_Wtime();
