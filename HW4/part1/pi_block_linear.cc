@@ -45,7 +45,6 @@ int main(int argc, char **argv)
     }
 
     long long recv_number_in_circle;
-
     if (world_rank > 0)
     {
         // TODO: handle workers

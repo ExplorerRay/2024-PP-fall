@@ -65,7 +65,7 @@ int main(int argc, char **argv)
     if (world_rank == 0)
     {
         // TODO: PI result
-        pi_result = 4.0 * total_number_in_circle / tosses;
+        pi_result = (4 * total_number_in_circle) / ((double) tosses);
 
         // --- DON'T TOUCH ---
         double end_time = MPI_Wtime();
