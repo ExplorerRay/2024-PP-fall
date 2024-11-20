@@ -2,6 +2,8 @@
 #include <fstream>
 #include <iostream>
 
+#define BLK_SIZE 64
+
 // Read size of matrix_a and matrix_b (n, m, l) and whole data of matrixes from in
 //
 // in:        input stream of the matrix file
@@ -45,7 +47,7 @@ void matrix_multiply(const int n, const int m, const int l,
 
     int distributed_rows = rows_per_process + ((world_rank < remain_rows) ? 1 : 0);
     int *local_a = new int[distributed_rows * m];
-    int *local_c = new int[distributed_rows * l];
+    int *local_c = new int[distributed_rows * l]();
     int *c_mat = nullptr;
     int *sendcounts = new int[world_size];
     int *send_displs = new int[world_size];
@@ -68,11 +70,16 @@ void matrix_multiply(const int n, const int m, const int l,
 
     // Local computation of matrix multiplication
     int local_rows = (world_rank < remain_rows) ? (rows_per_process + 1) : rows_per_process;
-    for (int i = 0; i < local_rows; i++) {
-        for (int j = 0; j < l; j++) {
-            local_c[i * l + j] = 0;
-            for (int k = 0; k < m; k++) {
-                local_c[i * l + j] += local_a[i * m + k] * b_mat[k * l + j];
+    for (int i = 0; i < local_rows; i += BLK_SIZE) {
+        for (int j = 0; j < l; j += BLK_SIZE) {
+            for (int k = 0; k < m; k += BLK_SIZE) {
+                for (int ii = i; ii < std::min(i + BLK_SIZE, local_rows); ii++) {
+                    for (int jj = j; jj < std::min(j + BLK_SIZE, l); jj++) {
+                        for (int kk = k; kk < std::min(k + BLK_SIZE, m); kk++) {
+                            local_c[ii * l + jj] += local_a[ii * m + kk] * b_mat[kk * l + jj];
+                        }
+                    }
+                }
             }
         }
     }
