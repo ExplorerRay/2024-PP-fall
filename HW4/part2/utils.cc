@@ -49,37 +49,25 @@ void matrix_multiply(const int n, const int m, const int l,
     int remain_rows = n % world_size;
 
     int distributed_rows = rows_per_process + ((world_rank < remain_rows) ? 1 : 0);
-    int *local_a = new int[distributed_rows * m];
     int *local_c = new int[distributed_rows * l]();
     int *c_mat = nullptr;
-    int *sendcounts = new int[world_size];
-    int *send_displs = new int[world_size];
     int *recvcounts = new int[world_size];
     int *recv_displs = new int[world_size];
 
     if (world_rank == 0) {
         c_mat = new int[n * l];
     }
-    for (int i = 0; i < world_size; i++){
-        sendcounts[i] = ((i < remain_rows) ? (rows_per_process + 1) : rows_per_process) * m;
-        send_displs[i] = (i == 0) ? 0 : send_displs[i - 1] + sendcounts[i - 1];
-    }
-
-    // Scatter rows of A to all processes
-    MPI_Scatterv(a_mat, sendcounts, send_displs, MPI_INT, local_a, sendcounts[world_rank], MPI_INT, 0, MPI_COMM_WORLD);
-
-    // Broadcast B to all processes
-    MPI_Bcast(const_cast<int*>(b_mat), m * l, MPI_INT, 0, MPI_COMM_WORLD);
 
     // Local computation of matrix multiplication
-    int local_rows = (world_rank < remain_rows) ? (rows_per_process + 1) : rows_per_process;
-    for (int i = 0; i < local_rows; i += BLK_SIZE) {
+    int start_row = world_rank * rows_per_process + std::min(world_rank, remain_rows);
+    int end_row = start_row + distributed_rows;
+    for (int i = start_row; i < end_row; i += BLK_SIZE) {
         for (int j = 0; j < l; j += BLK_SIZE) {
             for (int k = 0; k < m; k += BLK_SIZE) {
-                for (int ii = i; ii < std::min(i + BLK_SIZE, local_rows); ii++) {
+                for (int ii = i; ii < std::min(i + BLK_SIZE, end_row); ii++) {
                     for (int jj = j; jj < std::min(j + BLK_SIZE, l); jj++) {
                         for (int kk = k; kk < std::min(k + BLK_SIZE, m); kk++) {
-                            local_c[ii * l + jj] += local_a[ii * m + kk] * b_mat[kk * l + jj];
+                            local_c[(ii - start_row) * l + jj] += a_mat[ii * m + kk] * b_mat[kk * l + jj];
                         }
                     }
                 }
@@ -106,10 +94,7 @@ void matrix_multiply(const int n, const int m, const int l,
         delete[] c_mat;
     }
 
-    delete[] local_a;
     delete[] local_c;
-    delete[] sendcounts;
-    delete[] send_displs;
     delete[] recvcounts;
     delete[] recv_displs;
 }
