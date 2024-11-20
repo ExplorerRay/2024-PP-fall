@@ -38,6 +38,9 @@ void construct_matrices(std::ifstream &in, int *n_ptr, int *m_ptr, int *l_ptr,
 void matrix_multiply(const int n, const int m, const int l,
                      const int *a_mat, const int *b_mat)
 {
+    std::ios::sync_with_stdio(false);
+    std::cin.tie(0);
+
     int world_rank, world_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
@@ -98,7 +101,7 @@ void matrix_multiply(const int n, const int m, const int l,
             for (int j = 0; j < l; j++) {
                 std::cout << c_mat[i * l + j] << " ";
             }
-            std::cout << std::endl;
+            std::cout << '\n';
         }
         delete[] c_mat;
     }
