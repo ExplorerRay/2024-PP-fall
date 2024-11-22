@@ -15,3 +15,5 @@ NYCU 2024 parallel programming fall
 - HW4
     - Getting Familiar with MPI Programming
     - Parallelizing matrix multiplication with MPI
+- HW5
+    - Paralleling Fractal Generation with CUDA
