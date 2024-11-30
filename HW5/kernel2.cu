@@ -20,7 +20,7 @@ __device__ int mandel(float c_re, float c_im, int count) {
     return i;
 }
 
-__global__ void mandelKernel(float x1, float y1, float x0, float y0, int* output, int width, int height, int maxIterations, size_t pitch) {
+__global__ void mandelKernel(float stepX, float stepY, float x0, float y0, int* output, int width, int height, int maxIterations, size_t pitch) {
     // To avoid error caused by the floating number, use the following pseudo code
     //
     // float x = lowerX + thisX * stepX;
@@ -29,11 +29,8 @@ __global__ void mandelKernel(float x1, float y1, float x0, float y0, int* output
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < width && j < height) {
-        float dx = (x1 - x0) / width;
-        float dy = (y1 - y0) / height;
-
-        float x = x0 + i * dx;
-        float y = y0 + j * dy;
+        float x = x0 + i * stepX;
+        float y = y0 + j * stepY;
 
         int *row = (int*)((char*)output + j * pitch);
         row[i] = mandel(x, y, maxIterations);
@@ -60,7 +57,7 @@ void hostFE (float upperX, float upperY, float lowerX, float lowerY, int* img, i
     dim3 numBlocks(newResX/THREAD_SIZE, newResY/THREAD_SIZE);
     dim3 threadsPerBlock(THREAD_SIZE, THREAD_SIZE);
     // make resX and resY be multiple of THREAD_SIZE
-    mandelKernel<<<numBlocks, threadsPerBlock>>>(upperX, upperY, lowerX, lowerY, D_mem, resX, resY, maxIterations, pitch);
+    mandelKernel<<<numBlocks, threadsPerBlock>>>(stepX, stepY, lowerX, lowerY, D_mem, resX, resY, maxIterations, pitch);
 
     cudaMemcpy2D(H_mem, resX * sizeof(int), D_mem, pitch, resX * sizeof(int), resY, cudaMemcpyDeviceToHost);
     memcpy(img, H_mem, resX * resY * sizeof(int));
