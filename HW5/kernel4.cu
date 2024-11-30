@@ -4,36 +4,33 @@
 
 #define THREAD_SIZE 16
 
-__device__ int mandel(float c_re, float c_im, int count) {
-    float z_re = c_re, z_im = c_im;
+__device__ int mandel(float2 c, int count) {
+    float2 z = c;
     int i;
     for (i = 0; i < count; ++i)
     {
-        if (z_re * z_re + z_im * z_im > 4.f)
+        if (z.x * z.x + z.y * z.y > 4.f)
             break;
 
-        float new_re = z_re * z_re - z_im * z_im;
-        float new_im = 2.f * z_re * z_im;
-        z_re = c_re + new_re;
-        z_im = c_im + new_im;
+        float2 new_iter = make_float2(z.x * z.x - z.y * z.y, 2.f * z.x * z.y);
+        z.x = c.x + new_iter.x;
+        z.y = c.y + new_iter.y;
     }
     return i;
 }
 
-__global__ void mandelKernel(float stepX, float stepY, float x0, float y0, int* output, int width, int height, int maxIterations, int totalRows, int startRow) {
+__global__ void mandelKernel(float stepX, float stepY, float x0, float y0, int* output, int width, int height, int maxIterations) {
     // To avoid error caused by the floating number, use the following pseudo code
     //
     // float x = lowerX + thisX * stepX;
     // float y = lowerY + thisY * stepY;
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    int2 pos = make_int2(blockIdx.x * blockDim.x + threadIdx.x, blockIdx.y * blockDim.y + threadIdx.y);
 
-    if (i < width && j < totalRows) {
-        float x = x0 + i * stepX;
-        float y = y0 + (startRow + j) * stepY;
+    if (pos.x < width && pos.y < height) {
+        float2 posf = make_float2(x0 + pos.x * stepX, y0 + pos.y * stepY);
 
-        int index = ((startRow + j) * width + i);
-        output[index] = mandel(x, y, maxIterations);
+        int index = (pos.y * width + pos.x);
+        output[index] = mandel(posf, maxIterations);
     }
 }
 
@@ -52,7 +49,7 @@ void hostFE (float upperX, float upperY, float lowerX, float lowerY, int* img, i
     dim3 numBlocks(newResX/THREAD_SIZE, newResY/THREAD_SIZE);
     dim3 threadsPerBlock(THREAD_SIZE, THREAD_SIZE);
     // make resX and resY be multiple of THREAD_SIZE
-    mandelKernel<<<numBlocks, threadsPerBlock>>>(stepX, stepY, lowerX, lowerY, D_mem, resX, resY, maxIterations, resY, 0);
+    mandelKernel<<<numBlocks, threadsPerBlock>>>(stepX, stepY, lowerX, lowerY, D_mem, resX, resY, maxIterations);
 
     cudaMemcpy(img, D_mem, resX * resY * sizeof(int), cudaMemcpyDeviceToHost);
 
