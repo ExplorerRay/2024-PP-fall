@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <stdlib.h>
+#include <math.h>
+
 #include "CycleTimer.h"
 #include "helper.h"
 #include "hostFE.h"
@@ -79,16 +81,25 @@ int main(int argc, char **argv)
    }
    // end parsing of commandline options
 
+
+/*************************/
+/* OpenCL (from student) */
+/*************************/
+
+   // Output image on the host
+   float *outputImage = NULL;
+   double minThread = 0;
+{
    // read filter data
    int filterWidth;
    float *filter = readFilter(filterFile, &filterWidth);
 
    // Homegrown function to read a BMP from file
    float *inputImage = readImage(inputFile, &imageWidth, &imageHeight);
+
    // Size of the input and output images on the host
-   int dataSize = imageHeight * imageWidth * sizeof(float);
-   // Output image on the host
-   float *outputImage = (float *)malloc(dataSize);
+   const int dataSize = imageHeight * imageWidth * sizeof(float);
+   outputImage = (float *)malloc(dataSize);
 
    // helper init CL
    cl_program program;
@@ -96,7 +107,6 @@ int main(int argc, char **argv)
    cl_context context;
    initCL(&device, &context, &program);
 
-   double minThread = 0;
    double recordThread[10] = {0};
    for (int i = 0; i < 10; ++i)
    {
@@ -119,13 +129,29 @@ int main(int argc, char **argv)
 
    // Write the output image to file
    storeImage(outputImage, outputFile, imageHeight, imageWidth, inputFile);
+   free(inputImage);
+   free(filter);
+}
+
+/**********************/
+/* Serial (reference) */
+/**********************/
 
    // Output image of reference on the host
    float *refImage = NULL;
-   refImage = (float *)malloc(dataSize);
-   memset(refImage, 0, dataSize);
-
    double minSerial = 0;
+{
+   // read filter data
+   int filterWidth;
+   float *filter = readFilter(filterFile, &filterWidth);
+
+   // Homegrown function to read a BMP from file
+   float *inputImage = readImage(inputFile, &imageWidth, &imageHeight);
+
+   // Size of the input and output images on the host
+   const int dataSize = imageHeight * imageWidth * sizeof(float);
+   refImage = (float *)malloc(dataSize);
+
    double recordSerial[10] = {0};
    for (int i = 0; i < 10; ++i)
    {
@@ -145,18 +171,24 @@ int main(int argc, char **argv)
    printf("\n[conv serial]:\t\t[%.3f] ms\n\n", minSerial * 1000);
 
    storeImage(refImage, refFile, imageHeight, imageWidth, inputFile);
+   free(inputImage);
+   free(filter);
+}
 
    int diff_counter = 0;
    for (i = 0; i < imageHeight; i++)
    {
       for (j = 0; j < imageWidth; j++)
       {
-         if (abs(outputImage[i * imageWidth + j] - refImage[i * imageWidth + j]) > 10)
+         if (fabsf(outputImage[i * imageWidth + j] - refImage[i * imageWidth + j]) > 10)
          {
             diff_counter += 1;
          }
       }
    }
+
+   free(outputImage);
+   free(refImage);
 
    float diff_ratio = (float)diff_counter / (imageHeight * imageWidth);
    printf("Diff ratio: %f\n", diff_ratio);

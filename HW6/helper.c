@@ -52,6 +52,7 @@ char *readSource(char *kernelPath)
     fread(source, 1, size, fp);
     source[size] = '\0';
 
+    fclose(fp);
     return source;
 }
 
